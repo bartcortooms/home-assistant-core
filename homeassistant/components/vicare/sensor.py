@@ -1055,8 +1055,12 @@ def _build_entities(
     """Create ViCare sensor entities for a device."""
 
     entities: list[ViCareSensor] = []
+    _LOGGER.debug("Building ViCare sensor entities")
     for device in device_list:
-        # add device entities
+        _LOGGER.debug(
+            f"Processing device: {device.config.getModel()} - Serial: {get_device_serial(device.api)}"
+        )
+        # Add device entities (global sensors)
         entities.extend(
             ViCareSensor(
                 description,
@@ -1067,24 +1071,60 @@ def _build_entities(
             for description in GLOBAL_SENSORS
             if is_supported(description.key, description.value_getter, device.api)
         )
-        # add component entities
-        for component_list, entity_description_list in (
-            (get_circuits(device.api), CIRCUIT_SENSORS),
+
+        # Pre-fetch circuits for logging and iteration
+        circuits_for_device = get_circuits(device.api)
+        _LOGGER.debug(
+            f"Found circuits for device {device.config.getModel()}: {[c.id for c in circuits_for_device]}"
+        )
+
+        # Define component lists and their corresponding sensor descriptions
+        component_sources = [
+            (circuits_for_device, CIRCUIT_SENSORS),
             (get_burners(device.api), BURNER_SENSORS),
             (get_compressors(device.api), COMPRESSOR_SENSORS),
-        ):
-            entities.extend(
-                ViCareSensor(
-                    description,
-                    get_device_serial(device.api),
-                    device.config,
-                    device.api,
-                    component,
-                )
-                for component in component_list
-                for description in entity_description_list
-                if is_supported(description.key, description.value_getter, component)
-            )
+        ]
+
+        for component_list, entity_description_list in component_sources:
+            for component in component_list:
+                for description in entity_description_list:
+                    if (
+                        description.key == "circuit_target_temperature"
+                        and entity_description_list == CIRCUIT_SENSORS # Critical check
+                    ):
+                        _LOGGER.debug(
+                            f"Attempting to set up sensor '{description.key}' for circuit {component.id} on device {device.config.getModel()}"
+                        )
+                        feature_supported = is_supported(
+                            description.key, description.value_getter, component
+                        )
+                        _LOGGER.debug(
+                            f"Sensor '{description.key}' for circuit {component.id} - supported: {feature_supported}"
+                        )
+                        if feature_supported:
+                            entities.append(
+                                ViCareSensor(
+                                    description,
+                                    get_device_serial(device.api),
+                                    device.config,
+                                    device.api,
+                                    component,
+                                )
+                            )
+                    # Handle other sensors or other component types
+                    elif description.key != "circuit_target_temperature" or entity_description_list != CIRCUIT_SENSORS:
+                        if is_supported(
+                            description.key, description.value_getter, component
+                        ):
+                            entities.append(
+                                ViCareSensor(
+                                    description,
+                                    get_device_serial(device.api),
+                                    device.config,
+                                    device.api,
+                                    component,
+                                )
+                            )
     return entities
 
 
