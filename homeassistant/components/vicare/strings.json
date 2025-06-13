@@ -129,6 +129,9 @@
       "comfort_cooling_temperature": {
         "name": "Comfort cooling temperature"
       },
+      "circuit_target_temperature": {
+        "name": "Circuit Target Temperature"
+      },
       "dhw_temperature": {
         "name": "DHW temperature"
       },
@@ -418,9 +421,6 @@
       },
       "supply_temperature": {
         "name": "Supply temperature"
-      },
-      "circuit_target_temperature": {
-        "name": "Circuit Target Temperature"
       },
       "burner_starts": {
         "name": "Burner starts"

@@ -334,6 +334,15 @@ CIRCUIT_ENTITY_DESCRIPTIONS: tuple[ViCareNumberEntityDescription, ...] = (
             HeatingProgram.COMFORT_COOLING
         ),
     ),
+    ViCareNumberEntityDescription(
+        key="circuit_target_temperature",
+        translation_key="circuit_target_temperature",
+        device_class=NumberDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        entity_category=None,
+        value_getter=lambda api: api.getTargetTemperature(),
+        value_setter=None,
+    ),
 )
 
 
@@ -343,31 +352,67 @@ def _build_entities(
     """Create ViCare number entities for a device."""
 
     entities: list[ViCareNumber] = []
+    _LOGGER.debug("Building ViCare number entities") # New log
+
     for device in device_list:
-        # add device entities
-        entities.extend(
-            ViCareNumber(
-                description,
-                get_device_serial(device.api),
-                device.config,
-                device.api,
-            )
-            for description in DEVICE_ENTITY_DESCRIPTIONS
-            if is_supported(description.key, description.value_getter, device.api)
-        )
-        # add component entities
-        entities.extend(
-            ViCareNumber(
-                description,
-                get_device_serial(device.api),
-                device.config,
-                device.api,
-                circuit,
-            )
-            for circuit in get_circuits(device.api)
-            for description in CIRCUIT_ENTITY_DESCRIPTIONS
-            if is_supported(description.key, description.value_getter, circuit)
-        )
+        _LOGGER.debug(
+            f"Processing device for number entities: {device.config.getModel()} - Serial: {get_device_serial(device.api)}"
+        ) # New log
+
+        # Add device-level number entities
+        for description in DEVICE_ENTITY_DESCRIPTIONS:
+            if is_supported(description.key, description.value_getter, device.api):
+                entities.append(
+                    ViCareNumber(
+                        description,
+                        get_device_serial(device.api),
+                        device.config,
+                        device.api,
+                    )
+                )
+
+        # Add component-level (circuit) number entities
+        circuits_for_device = get_circuits(device.api)
+        _LOGGER.debug(
+            f"Found circuits for number entities on device {device.config.getModel()}: {[c.id for c in circuits_for_device]}"
+        ) # New log
+
+        for circuit_component in circuits_for_device:
+            for description in CIRCUIT_ENTITY_DESCRIPTIONS:
+                # Specific logging for circuit_target_temperature number entity
+                if description.key == "circuit_target_temperature":
+                    _LOGGER.debug(
+                        f"Attempting to set up number entity '{description.key}' for circuit {circuit_component.id} on device {device.config.getModel()}"
+                    )
+                    feature_supported = is_supported(
+                        description.key, description.value_getter, circuit_component
+                    )
+                    _LOGGER.debug(
+                        f"Number entity '{description.key}' for circuit {circuit_component.id} - supported: {feature_supported}"
+                    )
+                    if feature_supported:
+                        entities.append(
+                            ViCareNumber(
+                                description,
+                                get_device_serial(device.api),
+                                device.config,
+                                device.api,
+                                circuit_component,
+                            )
+                        )
+                # Generic handling for other circuit number entities
+                elif is_supported(
+                    description.key, description.value_getter, circuit_component
+                ):
+                    entities.append(
+                        ViCareNumber(
+                            description,
+                            get_device_serial(device.api),
+                            device.config,
+                            device.api,
+                            circuit_component,
+                        )
+                    )
     return entities
 
 
